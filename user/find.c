@@ -3,23 +3,25 @@
 #include "user/user.h"
 #include "kernel/fs.h"
 #include "kernel/fcntl.h"
+#include "kernel/param.h"
+
 
 // find(path, target):
-//     mở path, lấy type bằng fstat
-//     nếu mở lỗi: báo lỗi, return
+//     open path, get type using fstat
+//     if open fails: print error, return
 
-//     nếu path là FILE:
+//     if path is a FILE:
 //         do nothing
-//     nếu path là DIR:
-//         với mỗi entry de trong thư mục:
-//             bỏ qua nếu inum == 0, hoặc tên là "." hoặc ".."
-//             tạo newpath = path + "/" + de.name
-//             nếu de.name == target:   -> in newpath
-//             nếu newpath là thư mục:  -> find(newpath, target)   (đệ quy)
-//     đóng fd
+//     if path is a DIR:
+//         for each entry de in directory:
+//             skip if inum == 0, or name is "." or ".."
+//             create newpath = path + "/" + de.name
+//             if de.name == target:   -> print newpath
+//             if newpath is a directory:  -> find(newpath, target)   (recursive)
+//     close fd
 
 void find(char *path, char *target) {
-    char buf[512], *p;
+    char buf[MAXPATH], *p;
     int fd;
     struct dirent de;
     struct stat st;
