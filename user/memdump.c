@@ -57,9 +57,78 @@ main(int argc, char *argv[])
   exit(0);
 }
 
+// Copy 'size' bytes at data[*pos] into dst and advance *pos.
+// Print an error and return 0 if fewer than 'size' bytes remain.
+static int
+read_bytes(char f, char *data, int len, int *pos, void *dst, int size)
+{
+  if (len - *pos < size) {
+    printf("memdump: not enough data for '%c'\n", f);
+    return 0;
+  }
+
+  memmove(dst, data + *pos, size);
+  *pos += size;
+  return 1;
+}
+
+
 void
 memdump(char *fmt, char *data, int len)
 {
-  // Your code here.  `data` holds `len` valid bytes.
+  int pos = 0;
 
+  for (char *f = fmt; *f; f++) {
+    switch(*f) {
+      case 'i': {
+        int value;
+        if (!read_bytes('i', data, len, &pos, &value, sizeof(value)))
+          return;
+        printf("%d\n", value);
+        break;
+      }
+      case 'p': {
+        uint64 value;
+        if (!read_bytes('p', data, len, &pos, &value, sizeof(value)))
+          return;
+        printf("%lx\n", value);
+        break;
+      }
+      case 'h': {
+        short value;
+        if (!read_bytes('h', data, len, &pos, &value, sizeof(value)))
+          return;
+        printf("%d\n", value);
+        break;
+      }
+      case 'c': {
+        char value;
+        if (!read_bytes('c', data, len, &pos, &value, sizeof(value)))
+          return;
+        printf("%c\n", value);
+        break;
+      }
+      case 's': {
+        char *str;
+        if (!read_bytes('s', data, len, &pos, &str, sizeof(str)))
+          return;
+        printf("%s\n", str);
+        break;
+      }
+      case 'S': {
+        char *start = data + pos;
+        int remain = len - pos;
+        int k = 0;
+        while (k < remain && start[k] != 0)
+          k++;
+        write(1, start, k);
+        write(1, "\n", 1);
+        pos = len;
+        break;
+      }
+      default:
+        printf("memdump: unknown format '%c'\n", *f);
+        return;
+    }
+  }
 }
