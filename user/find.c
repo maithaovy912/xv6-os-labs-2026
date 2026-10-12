@@ -20,7 +20,9 @@
 //             if newpath is a directory:  -> find(newpath, target)   (recursive)
 //     close fd
 
-void find(char *path, char *target) {
+void 
+find(char *path, char *target)
+{
     char buf[MAXPATH], *p;
     int fd;
     struct dirent de;
@@ -38,13 +40,9 @@ void find(char *path, char *target) {
     }
 
     switch (st.type) {
-    case T_FILE:
-        // Do nothing for file
-        break;
-
     case T_DIR:
         if (strlen(path) + 1 + DIRSIZ + 1 > sizeof buf) {
-            printf("find: path too long\n");
+            fprintf(2, "find: path too long\n");
             break;
         }
         strcpy(buf, path);
@@ -54,18 +52,18 @@ void find(char *path, char *target) {
             if (de.inum == 0)
                 continue;
             
-            if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
-                continue;
-
             memmove(p, de.name, DIRSIZ);
             p[DIRSIZ] = 0;
 
-            if (strcmp(de.name, target) == 0) {
+            if (strcmp(p, ".") == 0 || strcmp(p, "..") == 0)
+                continue;
+
+            if (strcmp(p, target) == 0) {
                 printf("%s\n", buf);
             }
 
             if (stat(buf, &st) < 0) {
-                printf("find: cannot stat %s\n", buf);
+                fprintf(2, "find: cannot stat %s\n", buf);
                 continue;
             }
 
@@ -74,11 +72,18 @@ void find(char *path, char *target) {
             }
         }
         break;
+    
+    case T_FILE:
+    default:
+        // Regular file or device: nothing to traverse
+        break;
     }
     close(fd);
 }
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[]) 
+{
     if (argc != 3) {
         fprintf(2, "Usage: find <path> <target>\n");
         exit(1);
