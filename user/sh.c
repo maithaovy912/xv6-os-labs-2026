@@ -14,6 +14,12 @@
 
 #define MAXARGS 10
 
+#define HISTSIZE 16
+#define CMDLEN 100
+
+static char hist[HISTSIZE][CMDLEN];
+static int hist_count;
+
 struct cmd {
   int type;
 };
@@ -146,6 +152,82 @@ getcmd(char *buf, int nbuf)
   return 0;
 }
 
+// Save a command line (keeps '\n')
+static void
+add_history(char *cmd)
+{
+  strcpy(hist[hist_count % HISTSIZE], cmd);
+  hist_count++;
+}
+
+// Return command number n (1-based), or 0 if it is not in the history
+static char *
+get_history(int n)
+{
+  if (n < 1 || n > hist_count || n <= hist_count - HISTSIZE)
+    return 0;
+  return hist[(n - 1) % HISTSIZE];
+}
+
+static void
+print_history(void)
+{
+  int first = hist_count > HISTSIZE ? hist_count - HISTSIZE + 1 : 1;
+  for (int i = first; i <= hist_count; i++) {
+    char *cmd = get_history(i);
+    if (cmd != 0) {
+      printf("%d %s", i, cmd);
+      if (cmd[strlen(cmd) - 1] != '\n')
+        printf("\n");
+    }
+  }
+}
+
+static int
+is_blank(char *s)
+{
+  for (; *s; s++) {
+    if (*s != ' ' && *s != '\t' && *s != '\n')
+      return 0;
+  }
+  return 1;
+}
+
+static int
+expand_history(char *buf)
+{
+  int n;
+  char *cmd;
+  if (buf[0] != '!')
+    return 0;
+
+  if (buf[1] == '!' && (buf[2] == '\n' || buf[2] == '\0'))
+    n = hist_count;
+  else if (buf[1] >= '0' && buf[1] <= '9') {
+    int i = 1;
+    while (buf[i] >= '0' && buf[i] <= '9')
+      i++;
+    if (i - 1 > 9 || (buf[i] != '\n' && buf[i] != '\0')) {
+      fprintf(2, "history: invalid command");
+      return -1;
+    }
+    n = atoi(buf + 1);
+  } else {
+    fprintf(2, "history: invalid command\n");
+    return -1;
+  }
+
+  cmd = get_history(n);
+  if (cmd == 0) {
+    fprintf(2, "history: command not found\n");
+    return -1;
+  }
+
+  strcpy(buf, cmd);
+  printf("%s", buf);
+  return 0;
+}
+
 int
 main(void)
 {
@@ -163,6 +245,20 @@ main(void)
   // Read and run input commands.
   while (getcmd(buf, sizeof(buf)) >= 0) {
     char *cmd = buf;
+
+    if (is_blank(cmd))
+      continue;
+
+    if (expand_history(buf) < 0)
+      continue;
+
+    add_history(buf);
+
+    if (strcmp(buf, "history\n") == 0 || strcmp(buf, "history") == 0) {
+      print_history();
+      continue;
+    }
+
     while (*cmd == ' ' || *cmd == '\t')
       cmd++;
     if (*cmd == '\n') // is a blank command
