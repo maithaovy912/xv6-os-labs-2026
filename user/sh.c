@@ -208,7 +208,7 @@ expand_history(char *buf)
     while (buf[i] >= '0' && buf[i] <= '9')
       i++;
     if (i - 1 > 9 || (buf[i] != '\n' && buf[i] != '\0')) {
-      fprintf(2, "history: invalid command");
+      fprintf(2, "history: invalid command\n");
       return -1;
     }
     n = atoi(buf + 1);
