@@ -126,9 +126,8 @@ consoleread(int user_dst, uint64 dst, int n)
     dst++;
     --n;
 
-    if (c == '\n') {
-      // a whole line has arrived, return to
-      // the user-level read().
+    if(c == '\n' || c == '\t'){
+      // a whole line has arrived (or a tab for completion)
       break;
     }
   }
@@ -166,19 +165,19 @@ consoleintr(int c)
       consputc(BACKSPACE);
     }
     break;
-  default:
-    if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {
+    default:
+    if(c != 0 && cons.e-cons.r < INPUT_BUF_SIZE){
       c = (c == '\r') ? '\n' : c;
 
-      // echo back to the user.
-      consputc(c);
+      // echo back to the user (don't echo tab)
+      if(c != '\t')
+        consputc(c);
 
       // store for consumption by consoleread().
       cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
 
-      if (c == '\n' || c == C('D') || cons.e - cons.r == INPUT_BUF_SIZE) {
-        // wake up consoleread() if a whole line (or end-of-file)
-        // has arrived.
+      if(c == '\n' || c == '\t' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
+        // wake up consoleread() if a whole line (or tab) has arrived.
         cons.w = cons.e;
         wakeup(&cons.r);
       }

@@ -4,6 +4,7 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 #include "kernel/stat.h"
+#include "kernel/fs.h"
 
 // Parsed command representation
 #define EXEC  1
@@ -13,6 +14,7 @@
 #define BACK  5
 
 #define MAXARGS 10
+#define MAXMATCH 64
 
 struct cmd {
   int type;
@@ -132,16 +134,100 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
+#define MAXMATCH 64
+
+static int
+startswith(char *s, char *p, int plen)
+{
+  int i;
+  for (i = 0; i < plen; i++)
+    if (s[i] == 0 || s[i] != p[i])
+      return 0;
+  return 1;
+}
+
+// Handle a Tab press. buf holds what the user typed so far (n chars).
+static void
+complete(char *buf, int nbuf, int *pn)
+{
+  static char names[MAXMATCH][DIRSIZ + 1];
+  struct dirent de;
+  int n = *pn;
+  int start = n, first = 1, nm = 0, i, fd;
+  int plen;
+
+  // Find the start of the current word.
+  while (start > 0 && buf[start - 1] != ' ')
+    start--;
+  // Is it the first word of the line?
+  for (i = 0; i < start; i++)
+    if (buf[i] != ' ')
+      first = 0;
+  plen = n - start;
+
+  fd = open(first ? "/" : ".", O_RDONLY);
+  if (fd < 0)
+    return;
+  while (read(fd, &de, sizeof(de)) == sizeof(de)) {
+    if (de.inum == 0)
+      continue;
+    if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
+      continue;
+    if (!startswith(de.name, buf + start, plen))
+      continue;
+    if (nm < MAXMATCH) {
+      memmove(names[nm], de.name, DIRSIZ);
+      names[nm][DIRSIZ] = 0;
+      nm++;
+    }
+  }
+  close(fd);
+
+  if (nm == 0)
+    return;
+
+  if (nm == 1) {
+    // Single match: print the rest of the name and append it to buf.
+    char *suffix = names[0] + plen;
+    fprintf(2, "%s", suffix);
+    while (*suffix && n + 1 < nbuf)
+      buf[n++] = *suffix++;
+    buf[n] = 0;
+    *pn = n;
+    return;
+  }
+
+  // Several matches: list them on a new line, then redraw prompt + typed text.
+  fprintf(2, "\n");
+  for (i = 0; i < nm; i++)
+    fprintf(2, "%s%s", names[i], i + 1 < nm ? " " : "");
+  fprintf(2, "\n$ %s", buf);
+}
+
 int
 getcmd(char *buf, int nbuf)
 {
   struct stat st;
-  if (fstat(0, &st) == 0 && st.type == T_DEVICE) {
+  int iscons = (fstat(0, &st) == 0 && st.type == T_DEVICE);
+  int n = 0;
+  char c;
+
+  if (iscons)
     write(2, "$ ", 2);
-  }
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
-  if (buf[0] == 0) // EOF
+
+  while (n + 1 < nbuf) {
+    if (read(0, &c, 1) < 1)
+      break;
+    if (c == '\t' && iscons) {   // tab completion only on the console
+      complete(buf, nbuf, &n);
+      continue;
+    }
+    buf[n++] = c;
+    if (c == '\n' || c == '\r')
+      break;
+  }
+  if (n == 0) // EOF
     return -1;
   return 0;
 }
