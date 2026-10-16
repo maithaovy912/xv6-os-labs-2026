@@ -193,25 +193,49 @@ is_blank(char *s)
   return 1;
 }
 
+// Return 1 if s is exactly "history" followed only by whitespace
+static int
+is_history(char *s)
+{
+  char *h = "history";
+
+  while (*h && *s == *h) {
+    s++;
+    h++;
+  }
+  if (*h)
+    return 0;
+  return is_blank(s);
+}
+
+// If buf is "!!" or "!n" (surrounding whitespace allowed), replace buf by
+// that command and print it. Return 0 if buf is not a history reference
+// or on success, -1 on error.
 static int
 expand_history(char *buf)
 {
   int n;
   char *cmd;
-  if (buf[0] != '!')
+  char *s = buf;
+
+  while (*s == ' ' || *s == '\t') 
+    s++;
+  if (s[0] != '!')
     return 0;
 
-  if (buf[1] == '!' && (buf[2] == '\n' || buf[2] == '\0'))
+  if (s[1] == '!' && is_blank(s + 2)) {
     n = hist_count;
-  else if (buf[1] >= '0' && buf[1] <= '9') {
+  } else if (s[1] >= '0' && s[1] <= '9') {
     int i = 1;
-    while (buf[i] >= '0' && buf[i] <= '9')
+
+    while (s[i] >= '0' && s[i] <= '9')
       i++;
-    if (i - 1 > 9 || (buf[i] != '\n' && buf[i] != '\0')) {
+
+    if (i - 1 > 9 || !is_blank(s + i)) {
       fprintf(2, "history: invalid command\n");
       return -1;
     }
-    n = atoi(buf + 1);
+    n = atoi(s + 1);
   } else {
     fprintf(2, "history: invalid command\n");
     return -1;
@@ -231,7 +255,7 @@ expand_history(char *buf)
 int
 main(void)
 {
-  static char buf[100];
+  static char buf[CMDLEN];
   int fd;
 
   // Ensure that three file descriptors are open.
@@ -254,13 +278,14 @@ main(void)
 
     add_history(buf);
 
-    if (strcmp(buf, "history\n") == 0 || strcmp(buf, "history") == 0) {
+    while (*cmd == ' ' || *cmd == '\t')
+      cmd++;
+
+    if (is_history(cmd)) {
       print_history();
       continue;
     }
 
-    while (*cmd == ' ' || *cmd == '\t')
-      cmd++;
     if (*cmd == '\n') // is a blank command
       continue;
     if (cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' ') {
