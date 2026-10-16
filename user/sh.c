@@ -14,6 +14,12 @@
 
 #define MAXARGS 10
 
+#define HISTSIZE 16
+#define CMDLEN 100
+
+static char hist[HISTSIZE][CMDLEN];
+static int hist_count;
+
 struct cmd {
   int type;
 };
@@ -146,10 +152,110 @@ getcmd(char *buf, int nbuf)
   return 0;
 }
 
+// Save a command line (keeps '\n')
+static void
+add_history(char *cmd)
+{
+  strcpy(hist[hist_count % HISTSIZE], cmd);
+  hist_count++;
+}
+
+// Return command number n (1-based), or 0 if it is not in the history
+static char *
+get_history(int n)
+{
+  if (n < 1 || n > hist_count || n <= hist_count - HISTSIZE)
+    return 0;
+  return hist[(n - 1) % HISTSIZE];
+}
+
+static void
+print_history(void)
+{
+  int first = hist_count > HISTSIZE ? hist_count - HISTSIZE + 1 : 1;
+  for (int i = first; i <= hist_count; i++) {
+    char *cmd = get_history(i);
+    if (cmd != 0) {
+      printf("%d %s", i, cmd);
+      if (cmd[strlen(cmd) - 1] != '\n')
+        printf("\n");
+    }
+  }
+}
+
+static int
+is_blank(char *s)
+{
+  for (; *s; s++) {
+    if (*s != ' ' && *s != '\t' && *s != '\n')
+      return 0;
+  }
+  return 1;
+}
+
+// Return 1 if s is exactly "history" followed only by whitespace
+static int
+is_history(char *s)
+{
+  char *h = "history";
+
+  while (*h && *s == *h) {
+    s++;
+    h++;
+  }
+  if (*h)
+    return 0;
+  return is_blank(s);
+}
+
+// If buf is "!!" or "!n" (surrounding whitespace allowed), replace buf by
+// that command and print it. Return 0 if buf is not a history reference
+// or on success, -1 on error.
+static int
+expand_history(char *buf)
+{
+  int n;
+  char *cmd;
+  char *s = buf;
+
+  while (*s == ' ' || *s == '\t') 
+    s++;
+  if (s[0] != '!')
+    return 0;
+
+  if (s[1] == '!' && is_blank(s + 2)) {
+    n = hist_count;
+  } else if (s[1] >= '0' && s[1] <= '9') {
+    int i = 1;
+
+    while (s[i] >= '0' && s[i] <= '9')
+      i++;
+
+    if (i - 1 > 9 || !is_blank(s + i)) {
+      fprintf(2, "history: invalid command\n");
+      return -1;
+    }
+    n = atoi(s + 1);
+  } else {
+    fprintf(2, "history: invalid command\n");
+    return -1;
+  }
+
+  cmd = get_history(n);
+  if (cmd == 0) {
+    fprintf(2, "history: command not found\n");
+    return -1;
+  }
+
+  strcpy(buf, cmd);
+  printf("%s", buf);
+  return 0;
+}
+
 int
 main(void)
 {
-  static char buf[100];
+  static char buf[CMDLEN];
   int fd;
 
   // Ensure that three file descriptors are open.
@@ -163,8 +269,23 @@ main(void)
   // Read and run input commands.
   while (getcmd(buf, sizeof(buf)) >= 0) {
     char *cmd = buf;
+
+    if (is_blank(cmd))
+      continue;
+
+    if (expand_history(buf) < 0)
+      continue;
+
+    add_history(buf);
+
     while (*cmd == ' ' || *cmd == '\t')
       cmd++;
+
+    if (is_history(cmd)) {
+      print_history();
+      continue;
+    }
+
     if (*cmd == '\n') // is a blank command
       continue;
     if (cmd[0] == 'c' && cmd[1] == 'd' && cmd[2] == ' ') {
