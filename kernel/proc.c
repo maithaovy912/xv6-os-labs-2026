@@ -162,6 +162,7 @@ freeproc(struct proc *p)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
   p->sz = 0;
+  p->sandbox_mask = 0;
   p->pid = 0;
   p->name[0] = 0;
   p->chan = 0;
@@ -274,6 +275,7 @@ kfork(void)
     return -1;
   }
   np->sz = p->sz;
+  np->sandbox_mask = p->sandbox_mask;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
