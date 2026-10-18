@@ -44,16 +44,28 @@ consputc(int c)
   }
 }
 
+// input circular buffer
+#define INPUT_BUF_SIZE 128
+
 struct {
   struct spinlock lock;
-
-  // input circular buffer
-#define INPUT_BUF_SIZE 128
   char buf[INPUT_BUF_SIZE];
   uint r; // Read index
   uint w; // Write index
   uint e; // Edit index
+  int tabmode; // current line already had a Tab (earlier part is committed to the shell)
 } cons;
+
+// Hand a delete key to the shell (call while holding cons.lock).
+static void
+passthru(int c)
+{
+  if (cons.e - cons.r < INPUT_BUF_SIZE) {
+    cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
+    cons.w = cons.e;
+    wakeup(&cons.r);
+  }
+}
 
 //
 // user write() system calls to the console go here.
@@ -126,8 +138,9 @@ consoleread(int user_dst, uint64 dst, int n)
     dst++;
     --n;
 
-    if(c == '\n' || c == '\t'){
-      // a whole line has arrived (or a tab for completion)
+    if (c == '\n' || c == '\t') {
+      // a whole line has arrived (or a tab for completion),
+      // return to the user-level read().
       break;
     }
   }
@@ -157,27 +170,38 @@ consoleintr(int c)
       cons.e--;
       consputc(BACKSPACE);
     }
+    if (cons.tabmode)
+      passthru(c);
     break;
   case C('H'): // Backspace
   case '\x7f': // Delete key
     if (cons.e != cons.w) {
       cons.e--;
       consputc(BACKSPACE);
+    } else if (cons.tabmode) {
+      passthru(c); // no echo, the shell erases it itself
     }
     break;
-    default:
-    if(c != 0 && cons.e-cons.r < INPUT_BUF_SIZE){
+  default:
+    if (c != 0 && cons.e - cons.r < INPUT_BUF_SIZE) {
       c = (c == '\r') ? '\n' : c;
 
       // echo back to the user (don't echo tab)
-      if(c != '\t')
+      if (c != '\t')
         consputc(c);
 
       // store for consumption by consoleread().
       cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
 
-      if(c == '\n' || c == '\t' || c == C('D') || cons.e-cons.r == INPUT_BUF_SIZE){
-        // wake up consoleread() if a whole line (or tab) has arrived.
+      if (c == '\t')
+        cons.tabmode = 1;
+      else if (c == '\n' || c == C('D'))
+        cons.tabmode = 0;
+
+      if (c == '\n' || c == '\t' || c == C('D') ||
+          cons.e - cons.r == INPUT_BUF_SIZE) {
+        // wake up consoleread() if a whole line (or end-of-file,
+        // or tab) has arrived.
         cons.w = cons.e;
         wakeup(&cons.r);
       }

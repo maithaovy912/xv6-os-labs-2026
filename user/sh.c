@@ -134,7 +134,7 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
-#define MAXMATCH 64
+
 
 static int
 startswith(char *s, char *p, int plen)
@@ -146,6 +146,13 @@ startswith(char *s, char *p, int plen)
   return 1;
 }
 
+static int
+isdelim(char c)
+{
+  return c == ' ' || c == '|' || c == ';' || c == '&' ||
+         c == '(' || c == '<' || c == '>';
+}
+
 // Handle a Tab press. buf holds what the user typed so far (n chars).
 static void
 complete(char *buf, int nbuf, int *pn)
@@ -153,16 +160,21 @@ complete(char *buf, int nbuf, int *pn)
   static char names[MAXMATCH][DIRSIZ + 1];
   struct dirent de;
   int n = *pn;
-  int start = n, first = 1, nm = 0, i, fd;
+  int start = n, first, nm = 0, i, fd;
   int plen;
 
-  // Find the start of the current word.
-  while (start > 0 && buf[start - 1] != ' ')
+  // Walk back to the start of the current word.
+  while (start > 0 && !isdelim(buf[start - 1]))
     start--;
-  // Is it the first word of the line?
-  for (i = 0; i < start; i++)
-    if (buf[i] != ' ')
-      first = 0;
+
+  // The word is a command name if it is at the start of the line
+  // or right after | ; & (
+  i = start - 1;
+  while (i >= 0 && buf[i] == ' ')
+    i--;
+  first = (i < 0 || buf[i] == '|' || buf[i] == ';' ||
+           buf[i] == '&' || buf[i] == '(');
+
   plen = n - start;
 
   fd = open(first ? "/" : ".", O_RDONLY);
@@ -171,15 +183,16 @@ complete(char *buf, int nbuf, int *pn)
   while (read(fd, &de, sizeof(de)) == sizeof(de)) {
     if (de.inum == 0)
       continue;
-    if (strcmp(de.name, ".") == 0 || strcmp(de.name, "..") == 0)
+    if (nm >= MAXMATCH)
+      break;
+    // de.name may not be NUL-terminated; copy to a buffer that is.
+    memmove(names[nm], de.name, DIRSIZ);
+    names[nm][DIRSIZ] = 0;
+    if (strcmp(names[nm], ".") == 0 || strcmp(names[nm], "..") == 0)
       continue;
-    if (!startswith(de.name, buf + start, plen))
+    if (!startswith(names[nm], buf + start, plen))
       continue;
-    if (nm < MAXMATCH) {
-      memmove(names[nm], de.name, DIRSIZ);
-      names[nm][DIRSIZ] = 0;
-      nm++;
-    }
+    nm++;
   }
   close(fd);
 
@@ -219,8 +232,24 @@ getcmd(char *buf, int nbuf)
   while (n + 1 < nbuf) {
     if (read(0, &c, 1) < 1)
       break;
-    if (c == '\t' && iscons) {   // tab completion only on the console
+    if (iscons && c == '\t') {                  // Tab
       complete(buf, nbuf, &n);
+      continue;
+    }
+    if (iscons && (c == 0x7f || c == '\b')) {   // Backspace
+      if (n > 0) {
+        n--;
+        buf[n] = 0;
+        write(2, "\b \b", 3);
+      }
+      continue;
+    }
+    if (iscons && c == 0x15) {                  // Ctrl-U
+      while (n > 0) {
+        n--;
+        buf[n] = 0;
+        write(2, "\b \b", 3);
+      }
       continue;
     }
     buf[n++] = c;
