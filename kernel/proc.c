@@ -122,6 +122,8 @@ allocproc(void)
   return 0;
 
 found:
+  p->sandbox_mask = 0;
+  p->sandbox_path[0] = 0;
   p->pid = allocpid();
   p->state = USED;
 
@@ -276,6 +278,7 @@ kfork(void)
   }
   np->sz = p->sz;
   np->sandbox_mask = p->sandbox_mask;
+  safestrcpy(np->sandbox_path, p->sandbox_path, MAXPATH);
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
