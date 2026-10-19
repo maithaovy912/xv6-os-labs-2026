@@ -200,15 +200,22 @@ complete(char *buf, int nbuf, int *pn)
     return;
 
   if (nm == 1) {
-    // Single match: print the rest of the name and append it to buf.
-    char *suffix = names[0] + plen;
-    fprintf(2, "%s", suffix);
-    while (*suffix && n + 1 < nbuf)
-      buf[n++] = *suffix++;
-    buf[n] = 0;
-    *pn = n;
-    return;
+  // Single match: print the rest of the name and append it to buf.
+  char *suffix = names[0] + plen;
+
+  // 1. Copy từng ký tự vào buf và in ra màn hình cùng lúc
+  while (*suffix && n + 1 < nbuf) {
+    buf[n++] = *suffix;
+    write(2, suffix, 1);
+    suffix++;
   }
+
+  // 2. Thêm dấu cách nếu đang hoàn thành tên lệnh (first != 0) và buf còn chỗ
+  if (first && n + 1 < nbuf) {
+    buf[n++] = ' ';
+    write(2, " ", 1);
+  }
+}
 
   // Several matches: list them on a new line, then redraw prompt + typed text.
   fprintf(2, "\n");
