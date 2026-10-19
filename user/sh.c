@@ -203,14 +203,14 @@ complete(char *buf, int nbuf, int *pn)
     // Single match: print the rest of the name and append it to buf.
     char *suffix = names[0] + plen;
 
-    // 1. Copy từng ký tự vào buf và in ra màn hình cùng lúc
+    // Append characters to buf and print them one by one to avoid overprinting
     while (*suffix && n + 1 < nbuf) {
     buf[n++] = *suffix;
     write(2, suffix, 1);
     suffix++;
     }
 
-    // 2. Thêm dấu cách nếu đang hoàn thành tên lệnh và buf còn chỗ
+    // Auto-append a space if completing the first word (command) and buf has capacity
     if (first && n + 1 < nbuf) {
     buf[n++] = ' ';
     write(2, " ", 1);
