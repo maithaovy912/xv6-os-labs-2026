@@ -4,6 +4,7 @@
 #include "user/user.h"
 #include "kernel/fcntl.h"
 #include "kernel/stat.h"
+#include "kernel/fs.h"
 
 // Parsed command representation
 #define EXEC  1
@@ -13,6 +14,7 @@
 #define BACK  5
 
 #define MAXARGS 10
+#define MAXMATCH 64
 
 #define HISTSIZE 16
 #define CMDLEN 100
@@ -138,16 +140,140 @@ runcmd(struct cmd *cmd)
   exit(0);
 }
 
+
+
+static int
+startswith(char *s, char *p, int plen)
+{
+  int i;
+  for (i = 0; i < plen; i++)
+    if (s[i] == 0 || s[i] != p[i])
+      return 0;
+  return 1;
+}
+
+static int
+isdelim(char c)
+{
+  return c == ' ' || c == '|' || c == ';' || c == '&' ||
+         c == '(' || c == '<' || c == '>';
+}
+
+// Handle a Tab press. buf holds what the user typed so far (n chars).
+static void
+complete(char *buf, int nbuf, int *pn)
+{
+  static char names[MAXMATCH][DIRSIZ + 1];
+  struct dirent de;
+  int n = *pn;
+  int start = n, first, nm = 0, i, fd;
+  int plen;
+
+  // Walk back to the start of the current word.
+  while (start > 0 && !isdelim(buf[start - 1]))
+    start--;
+
+  // The word is a command name if it is at the start of the line
+  // or right after | ; & (
+  i = start - 1;
+  while (i >= 0 && buf[i] == ' ')
+    i--;
+  first = (i < 0 || buf[i] == '|' || buf[i] == ';' ||
+           buf[i] == '&' || buf[i] == '(');
+
+  plen = n - start;
+
+  fd = open(first ? "/" : ".", O_RDONLY);
+  if (fd < 0)
+    return;
+  while (read(fd, &de, sizeof(de)) == sizeof(de)) {
+    if (de.inum == 0)
+      continue;
+    if (nm >= MAXMATCH)
+      break;
+    // de.name may not be NUL-terminated; copy to a buffer that is.
+    memmove(names[nm], de.name, DIRSIZ);
+    names[nm][DIRSIZ] = 0;
+    if (strcmp(names[nm], ".") == 0 || strcmp(names[nm], "..") == 0)
+      continue;
+    if (!startswith(names[nm], buf + start, plen))
+      continue;
+    nm++;
+  }
+  close(fd);
+
+  if (nm == 0)
+    return;
+
+  if (nm == 1) {
+    // Single match: print the rest of the name and append it to buf.
+    char *suffix = names[0] + plen;
+
+    // Append characters to buf and print them one by one to avoid overprinting
+    while (*suffix && n + 1 < nbuf) {
+    buf[n++] = *suffix;
+    write(2, suffix, 1);
+    suffix++;
+    }
+
+    // Auto-append a space if completing the first word (command) and buf has capacity
+    if (first && n + 1 < nbuf) {
+    buf[n++] = ' ';
+    write(2, " ", 1);
+    }
+
+    buf[n] = 0;
+    *pn = n;
+    return;
+  }
+
+  // Several matches: list them on a new line, then redraw prompt + typed text.
+  fprintf(2, "\n");
+  for (i = 0; i < nm; i++)
+    fprintf(2, "%s%s", names[i], i + 1 < nm ? " " : "");
+  fprintf(2, "\n$ %s", buf);
+}
+
 int
 getcmd(char *buf, int nbuf)
 {
   struct stat st;
-  if (fstat(0, &st) == 0 && st.type == T_DEVICE) {
+  int iscons = (fstat(0, &st) == 0 && st.type == T_DEVICE);
+  int n = 0;
+  char c;
+
+  if (iscons)
     write(2, "$ ", 2);
-  }
   memset(buf, 0, nbuf);
-  gets(buf, nbuf);
-  if (buf[0] == 0) // EOF
+
+  while (n + 1 < nbuf) {
+    if (read(0, &c, 1) < 1)
+      break;
+    if (iscons && c == '\t') {                  // Tab
+      complete(buf, nbuf, &n);
+      continue;
+    }
+    if (iscons && (c == 0x7f || c == '\b')) {   // Backspace
+      if (n > 0) {
+        n--;
+        buf[n] = 0;
+        write(2, "\b \b", 3);
+      }
+      continue;
+    }
+    if (iscons && c == 0x15) {                  // Ctrl-U
+      while (n > 0) {
+        n--;
+        buf[n] = 0;
+        write(2, "\b \b", 3);
+      }
+      continue;
+    }
+    buf[n++] = c;
+    if (c == '\n' || c == '\r')
+      break;
+  }
+  if (n == 0) // EOF
     return -1;
   return 0;
 }
