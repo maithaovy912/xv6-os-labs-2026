@@ -234,12 +234,31 @@ complete(char *buf, int nbuf, int *pn)
   fprintf(2, "\n$ %s", buf);
 }
 
+static char *get_history(int n);
+
+static void
+setline(char *buf, int nbuf, int *pn, char *s)
+{
+  int n = *pn, len = 0;
+  while (n-- > 0)
+    write(2, "\b \b", 3);
+  while (s[len] && s[len] != '\n' && s[len] != '\r' && len + 1 < nbuf) {
+    buf[len] = s[len];
+    len++;
+  }
+  memset(buf + len, 0, nbuf - len);
+  write(2, buf, len);
+  *pn = len;
+}
+
 int
 getcmd(char *buf, int nbuf)
 {
   struct stat st;
   int iscons = (fstat(0, &st) == 0 && st.type == T_DEVICE);
   int n = 0;
+  int hpos = hist_count + 1; 
+  char draft[CMDLEN];
   char c;
 
   if (iscons)
@@ -249,6 +268,29 @@ getcmd(char *buf, int nbuf)
   while (n + 1 < nbuf) {
     if (read(0, &c, 1) < 1)
       break;
+
+    if (iscons && c == 0x1b) {
+      char c1, c2;
+      if (read(0, &c1, 1) < 1 || read(0, &c2, 1) < 1)
+        break;
+      if (c1 != '[')
+        continue;
+      while ((c2 >= '0' && c2 <= '9') || c2 == ';')
+        if (read(0, &c2, 1) < 1)
+          break;
+      if (c2 == 'A' && hpos > 1 && get_history(hpos - 1) != 0) {
+        if (hpos == hist_count + 1)
+          memmove(draft, buf, nbuf < CMDLEN ? nbuf : CMDLEN);
+        hpos--;
+        setline(buf, nbuf, &n, get_history(hpos));
+      } else if (c2 == 'B' && hpos <= hist_count) {
+        hpos++;
+        setline(buf, nbuf, &n,
+                hpos == hist_count + 1 ? draft : get_history(hpos));
+      }
+      continue;
+    }
+
     if (iscons && c == '\t') {                  // Tab
       complete(buf, nbuf, &n);
       continue;
@@ -392,6 +434,7 @@ main(void)
     }
   }
 
+  
   // Read and run input commands.
   while (getcmd(buf, sizeof(buf)) >= 0) {
     char *cmd = buf;
