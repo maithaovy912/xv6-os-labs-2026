@@ -159,5 +159,8 @@ syscall(void)
       }
     }
     p->trapframe->a0 = syscalls[num]();
+  } else {
+    printk("%d %s: unknown sys call %d\n", p->pid, p->name, num);
+    p->trapframe->a0 = -1;
   }
 }
