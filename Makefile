@@ -204,7 +204,7 @@ UPROGS=\
 	$U/_dorphan\
 	$U/_sync\
 	$U/_exploit\
-
+	$U/_exploit2\
 
 
 ifeq ($(LAB),syscall)
