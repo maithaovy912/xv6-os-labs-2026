@@ -211,15 +211,15 @@ complete(char *buf, int nbuf, int *pn)
 
     // Append characters to buf and print them one by one to avoid overprinting
     while (*suffix && n + 1 < nbuf) {
-    buf[n++] = *suffix;
-    write(2, suffix, 1);
-    suffix++;
+      buf[n++] = *suffix;
+      write(2, suffix, 1);
+      suffix++;
     }
 
     // Auto-append a space if completing the first word (command) and buf has capacity
     if (first && n + 1 < nbuf) {
-    buf[n++] = ' ';
-    write(2, " ", 1);
+      buf[n++] = ' ';
+      write(2, " ", 1);
     }
 
     buf[n] = 0;
@@ -257,7 +257,7 @@ getcmd(char *buf, int nbuf)
   struct stat st;
   int iscons = (fstat(0, &st) == 0 && st.type == T_DEVICE);
   int n = 0;
-  int hpos = hist_count + 1; 
+  int hpos = hist_count + 1;
   char draft[CMDLEN];
   char c;
 
@@ -271,24 +271,30 @@ getcmd(char *buf, int nbuf)
 
     if (iscons && c == 0x1b) {
       char c1, c2;
-      if (read(0, &c1, 1) < 1 || read(0, &c2, 1) < 1)
+      if (read(0, &c1, 1) < 1)
         break;
-      if (c1 != '[')
-        continue;
-      while ((c2 >= '0' && c2 <= '9') || c2 == ';')
+      if (c1 != '[') {
+        c = c1;                     // not an escape sequence: handle as a normal char
+      } else {
         if (read(0, &c2, 1) < 1)
           break;
-      if (c2 == 'A' && hpos > 1 && get_history(hpos - 1) != 0) {
-        if (hpos == hist_count + 1)
-          memmove(draft, buf, nbuf < CMDLEN ? nbuf : CMDLEN);
-        hpos--;
-        setline(buf, nbuf, &n, get_history(hpos));
-      } else if (c2 == 'B' && hpos <= hist_count) {
-        hpos++;
-        setline(buf, nbuf, &n,
-                hpos == hist_count + 1 ? draft : get_history(hpos));
+        while ((c2 >= '0' && c2 <= '9') || c2 == ';')
+          if (read(0, &c2, 1) < 1)
+            break;
+        if (c2 == 'A' && hpos > 1 && get_history(hpos - 1) != 0) {
+          if (hpos == hist_count + 1) {
+            memmove(draft, buf, n);
+            draft[n] = 0;
+          }
+          hpos--;
+          setline(buf, nbuf, &n, get_history(hpos));
+        } else if (c2 == 'B' && hpos <= hist_count) {
+          hpos++;
+          setline(buf, nbuf, &n,
+                  hpos == hist_count + 1 ? draft : get_history(hpos));
+        }
+        continue;
       }
-      continue;
     }
 
     if (iscons && c == '\t') {                  // Tab
@@ -386,7 +392,7 @@ expand_history(char *buf)
   char *cmd;
   char *s = buf;
 
-  while (*s == ' ' || *s == '\t') 
+  while (*s == ' ' || *s == '\t')
     s++;
   if (s[0] != '!')
     return 0;
@@ -434,8 +440,6 @@ main(void)
     }
   }
 
-  
-  // Read and run input commands.
   while (getcmd(buf, sizeof(buf)) >= 0) {
     char *cmd = buf;
 

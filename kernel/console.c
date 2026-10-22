@@ -54,7 +54,7 @@ struct {
   uint w; // Write index
   uint e; // Edit index
   int tabmode; // current line already had a Tab (earlier part is committed to the shell)
-  int esc;  
+  int esc;     // escape sequence state: 0 none, 1 after ESC, 2 after ESC [
 } cons;
 
 // Hand a delete key to the shell (call while holding cons.lock).
@@ -189,13 +189,18 @@ consoleintr(int c)
 
       int isesc = 0, escdone = 0;
       if (cons.esc == 0 && c == 0x1b) {
-        cons.esc = 1; isesc = 1;
+        cons.esc = 1;
+        isesc = 1;
       } else if (cons.esc == 1) {
-        if (c == '[') { cons.esc = 2; isesc = 1; }
-        else cons.esc = 0;                       // ESC + ký tự khác: coi như thường
+        if (c == '[') {
+          cons.esc = 2;
+          isesc = 1;
+        } else {
+          cons.esc = 0;   // ESC + other key: treat as a normal char
+        }
       } else if (cons.esc == 2) {
         isesc = 1;
-        if (!((c >= '0' && c <= '9') || c == ';')) {  // byte cuối (A/B/C/D/~...)
+        if (!((c >= '0' && c <= '9') || c == ';')) {  // final byte (A/B/C/D/~...)
           cons.esc = 0;
           escdone = 1;
         }
@@ -208,13 +213,15 @@ consoleintr(int c)
       // store for consumption by consoleread().
       cons.buf[cons.e++ % INPUT_BUF_SIZE] = c;
 
-      if (c == '\t' || escdone)
+      if (c == '\t' || escdone)   // escdone: final byte of an escape sequence
         cons.tabmode = 1;
       else if (c == '\n' || c == C('D'))
         cons.tabmode = 0;
 
       if (c == '\n' || c == '\t' || escdone || c == C('D') ||
           cons.e - cons.r == INPUT_BUF_SIZE) {
+        // wake up consoleread() if a whole line, end-of-file, tab
+        // or arrow key has arrived.
         cons.w = cons.e;
         wakeup(&cons.r);
       }
