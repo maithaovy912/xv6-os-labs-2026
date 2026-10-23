@@ -205,7 +205,7 @@ UPROGS=\
 	$U/_sync\
 	$U/_exploit\
 	$U/_exploit2\
-
+	$U/_exploit3\
 
 ifeq ($(LAB),syscall)
 UPROGS += \
