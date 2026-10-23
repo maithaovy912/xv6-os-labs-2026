@@ -267,7 +267,7 @@ iget(uint dev, uint inum)
   // Recycle an inode entry.
   if (empty == 0) {
     panic("iget: no inodes");
-    // FIX: Return 0 instead of calling panic("iget: no inodes")
+  // FIX: Release lock and return 0 instead of calling panic("iget: no inodes")
     //release(&itable.lock);
     //return 0; 
   }
