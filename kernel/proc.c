@@ -603,6 +603,11 @@ kkill(int pid)
 {
   struct proc *p;
 
+  // FIX: Protect initproc (PID 1) and invalid PIDs (<= 0) from being killed
+  // if (pid <= 1) {
+  //   return -1;
+  // }
+
   for (p = proc; p < &proc[NPROC]; p++) {
     acquire(&p->lock);
     if (p->pid == pid) {
