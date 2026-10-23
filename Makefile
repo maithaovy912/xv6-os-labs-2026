@@ -206,6 +206,10 @@ UPROGS=\
 	$U/_exploit1\
 	$U/_exploit2\
 	$U/_exploit3\
+	$U/_sandbox\
+	$U/_sbtest\
+
+
 
 ifeq ($(LAB),syscall)
 UPROGS += \
