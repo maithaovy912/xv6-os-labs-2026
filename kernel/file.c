@@ -92,6 +92,11 @@ filestat(struct file *f, uint64 addr)
 
   if (f->type == FD_INODE || f->type == FD_DEVICE) {
     ilock(f->ip);
+
+    // FIX: Clear structure memory to zero out alignment padding bytes
+    // and prevent Kernel Stack Information Leak
+    // memset(&st, 0, sizeof(st));
+
     stati(f->ip, &st);
     iunlock(f->ip);
     if (copyout(p->pagetable, p->sz, addr, (char *)&st, sizeof(st)) < 0)
