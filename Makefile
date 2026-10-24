@@ -204,6 +204,7 @@ UPROGS=\
 	$U/_dorphan\
 	$U/_sync\
 	$U/_exploit1\
+	$U/_exploit1b\
 	$U/_exploit2\
 	$U/_exploit3\
 	$U/_sandbox\
