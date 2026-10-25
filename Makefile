@@ -203,7 +203,7 @@ UPROGS=\
 	$U/_forphan\
 	$U/_dorphan\
 	$U/_sync\
-	$U/_exploit1\
+	$U/_exploit1a\
 	$U/_exploit1b\
 	$U/_exploit2\
 	$U/_exploit3\
