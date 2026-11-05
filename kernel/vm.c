@@ -148,10 +148,46 @@ walkaddr(pagetable_t pagetable, uint64 va)
 
 
 #if defined(LAB_PGTBL) || defined(SOL_MMAP) || defined(SOL_COW)
+// Recursively print one page-table page.
+// level: 2 = root, 1 = middle, 0 = leaf. base_va: VA covered by this page.
+static void
+vmprint_level(pagetable_t pt, int level, uint64 base_va)
+{
+  int depth = 3 - level;  // root entries get 1 " ..", then 2, then 3
+
+  for (int i = 0; i < 512; i++) {
+    pte_t pte = pt[i];
+    if ((pte & PTE_V) == 0)
+      continue;
+
+    uint64 va = base_va | ((uint64)i << (PGSHIFT + 9 * level));
+    uint64 pa = PTE2PA(pte);
+
+    for (int d = 0; d < depth; d++)
+      printk(" ..");
+    printk("%p: pte %p pa %p", (void *)va, (void *)pte, (void *)pa);
+
+    if (pte & (PTE_R | PTE_W | PTE_X)) {
+      // leaf PTE: print permission bits
+      printk(" ");
+      if (pte & PTE_R) printk("R");
+      if (pte & PTE_W) printk("W");
+      if (pte & PTE_X) printk("X");
+      if (pte & PTE_U) printk("U");
+      printk("\n");
+    } else {
+      // points to the next-level page table: recurse
+      printk("\n");
+      vmprint_level((pagetable_t)pa, level - 1, va);
+    }
+  }
+}
+
 void
 vmprint(pagetable_t pagetable)
 {
-  // your code here
+  printk("page table %p\n", pagetable);
+  vmprint_level(pagetable, 2, 0);
 }
 #endif
 
