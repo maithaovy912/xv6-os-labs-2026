@@ -106,11 +106,52 @@ sys_vmprint(void)
 }
 #endif
 
+#define PGACCESS_MAX 4096 // max pages per call (fits a 512 byte mask)
+
 #ifdef LAB_PGTBL
 int
 sys_pgaccess(void)
 {
-  // lab pgtbl: your code here.
+  uint64 base, mask;
+  int len;
+  struct proc *p = myproc();
+  char buf[PGACCESS_MAX / 8];
+
+  argaddr(0, &base);
+  argint(1, &len);
+  argaddr(2, &mask);
+
+  if (len < 0 || len > PGACCESS_MAX)
+    return -1;
+  
+  base = PGROUNDDOWN(base); // malloc() may return an unaligned address
+  if (base >= MAXVA || base + (uint64)len * PGSIZE > MAXVA)
+    return -1;
+  
+  int nbytes = (len + 7) / 8;
+  memset(buf, 0, nbytes);
+
+  // pass 1: validate every page and build the bit mask, change no PTE yet
+  for (int i = 0; i < len; i++) {
+    pte_t *pte = walk(p->pagetable, base + (uint64)i * PGSIZE, 0);
+    if (pte == 0 || (*pte & PTE_V) == 0 || (*pte & PTE_U) == 0)
+      return -1;
+    if (*pte & PTE_A)
+      buf[i / 8] |= 1 << (i % 8);
+  }
+
+  if (copyout(p->pagetable, p->sz, mask, buf, nbytes) < 0)
+    return -1;
+  
+  // pass 2: clear the A bits that were set
+  for (int i = 0; i < len; i++) {
+    if (buf[i / 8] & (1 << (i % 8))) {
+      pte_t *pte = walk(p->pagetable, base + (uint64)i * PGSIZE, 0);
+      *pte &= ~PTE_A;
+    }
+  }
+  sfence_vma(); // drop cached translations so the A bit gets set again on next access
+
   return 0;
 }
 #endif
