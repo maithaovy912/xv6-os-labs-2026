@@ -106,16 +106,17 @@ sys_vmprint(void)
 }
 #endif
 
-#define PGACCESS_MAX 4096 // max pages per call (fits a 512 byte mask)
 
 #ifdef LAB_PGTBL
+#define PGACCESS_MAX 4096 // max pages per call (fits a 512 byte mask)
+
 int
 sys_pgaccess(void)
 {
   uint64 base, mask;
   int len;
   struct proc *p = myproc();
-  char buf[PGACCESS_MAX / 8];
+  unsigned char buf[PGACCESS_MAX / 8];
 
   argaddr(0, &base);
   argint(1, &len);
@@ -123,11 +124,11 @@ sys_pgaccess(void)
 
   if (len < 0 || len > PGACCESS_MAX)
     return -1;
-  
+
   base = PGROUNDDOWN(base); // malloc() may return an unaligned address
   if (base >= MAXVA || base + (uint64)len * PGSIZE > MAXVA)
     return -1;
-  
+
   int nbytes = (len + 7) / 8;
   memset(buf, 0, nbytes);
 
@@ -140,9 +141,9 @@ sys_pgaccess(void)
       buf[i / 8] |= 1 << (i % 8);
   }
 
-  if (copyout(p->pagetable, p->sz, mask, buf, nbytes) < 0)
+  if (copyout(p->pagetable, p->sz, mask, (char *)buf, nbytes) < 0)
     return -1;
-  
+
   // pass 2: clear the A bits that were set
   for (int i = 0; i < len; i++) {
     if (buf[i / 8] & (1 << (i % 8))) {
