@@ -111,3 +111,30 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigalarm(void)
+{
+  int n;
+  uint64 handler;
+  struct proc *p = myproc();
+
+  argint(0, &n);
+  argaddr(1, &handler);
+  p->alarm_interval = n;
+  p->alarm_handler = handler;
+  p->alarm_ticks = 0;
+  p->in_alarm = 0;
+  return 0;
+}
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc *p = myproc();
+  if (!p->in_alarm)
+    return -1;
+  *p->trapframe = p->saved_tf;  // restores register, including epc
+  p->in_alarm = 0;
+  return p->trapframe->a0;      // syscall will store a0 = this value
+}
