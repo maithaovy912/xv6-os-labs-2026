@@ -14,6 +14,7 @@
 #include "riscv.h"
 #include "defs.h"
 #include "proc.h"
+#include "symbols.h"
 
 volatile int panicking = 0; // printing a panic message
 volatile int panicked = 0;  // spinning forever at end of a panic
@@ -134,6 +135,29 @@ printk(char *fmt, ...)
   return 0;
 }
 
+// Look up which function the return address (ra) belongs to
+void
+print_symbol(uint64 ra)
+{
+  int best_idx = -1;
+  uint64 max_addr = 0;
+
+  // Find the function with starting address <= ra and closest to ra
+  for (int i = 0; i < nksymbols; i++) {
+    if (ksymbols[i].addr <= ra && ksymbols[i].addr > max_addr) {
+      max_addr = ksymbols[i].addr;
+      best_idx = i;
+    }
+  }
+
+  if (best_idx != -1) {
+    printk("%s\n", ksymbols[best_idx].func);
+    printk("%s\n", ksymbols[best_idx].file_line);
+  } else {
+    printk("%p\n", (void *)ra);
+  }
+}
+
 void
 backtrace(void)
 {
@@ -143,7 +167,10 @@ backtrace(void)
   printk("backtrace:\n");
   while (PGROUNDDOWN(fp) == top_page) {
     uint64 ra = *(uint64 *)(fp - 8);
-    printk("%p\n", (void *)ra);
+    
+    // Replace the old printk("%p\n", (void *)ra); with the symbol lookup function
+    print_symbol(ra);
+
     fp = *(uint64 *)(fp - 16);
   }
   printk("\n");
