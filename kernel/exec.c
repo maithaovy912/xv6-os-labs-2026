@@ -130,6 +130,10 @@ kexec(char *path, char **argv)
   safestrcpy(p->name, last, sizeof(p->name));
 
   // Commit to the user image.
+  p->alarm_interval = 0;
+  p->alarm_handler = 0;
+  p->alarm_ticks = 0;
+  p->in_alarm = 0;
   oldpagetable = p->pagetable;
   p->pagetable = pagetable;
   p->sz = sz;
