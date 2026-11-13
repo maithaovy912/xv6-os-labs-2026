@@ -30,7 +30,8 @@ OBJS = \
   $K/sysfile.o \
   $K/kernelvec.o \
   $K/plic.o \
-  $K/virtio_disk.o
+  $K/virtio_disk.o\
+  $K/symbols.o
 
 ifeq ($(LAB),pgtbl)
 OBJS += \
@@ -140,7 +141,18 @@ endif
 
 LDFLAGS = -z max-page-size=4096
 
+# 1. Create a default (dummy) symbols.c file if it does not exist
+$K/symbols.c:
+	@echo '#include "types.h"' > $K/symbols.c
+	@echo '#include "symbols.h"' >> $K/symbols.c
+	@echo 'struct symbol_entry ksymbols[1];' >> $K/symbols.c
+	@echo 'int nksymbols = 0;' >> $K/symbols.c
+
+# 2. Kernel build rule using two-pass linking
 $K/kernel: $(OBJS) $(OBJS_KCSAN) $K/kernel.ld
+	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) $(OBJS_KCSAN)
+	python3 gensym.py
+	$(CC) $(CFLAGS) -c -o $K/symbols.o $K/symbols.c
 	$(LD) $(LDFLAGS) -T $K/kernel.ld -o $K/kernel $(OBJS) $(OBJS_KCSAN)
 	$(OBJDUMP) -S $K/kernel > $K/kernel.asm
 	$(OBJDUMP) -t $K/kernel | sed '1,/SYMBOL TABLE/d; s/ .* / /; /^$$/d' > $K/kernel.sym
