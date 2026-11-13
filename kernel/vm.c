@@ -153,7 +153,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
 static void
 vmprint_level(pagetable_t pt, int level, uint64 base_va)
 {
-  int depth = 3 - level;  // root entries get 1 " ..", then 2, then 3
+  int depth = 3 - level; // root entries get 1 " ..", then 2, then 3
 
   for (int i = 0; i < 512; i++) {
     pte_t pte = pt[i];
@@ -170,18 +170,22 @@ vmprint_level(pagetable_t pt, int level, uint64 base_va)
     if (pte & (PTE_R | PTE_W | PTE_X)) {
       // leaf PTE: print permission bits
       printk(" ");
-      if (pte & PTE_R) printk("R");
-      if (pte & PTE_W) printk("W");
-      if (pte & PTE_X) printk("X");
-      if (pte & PTE_U) printk("U");
+      if (pte & PTE_R)
+        printk("R");
+      if (pte & PTE_W)
+        printk("W");
+      if (pte & PTE_X)
+        printk("X");
+      if (pte & PTE_U)
+        printk("U");
       if (level == 1)
         printk(" (superpage)");
       printk("\n");
-    
     } else {
       // points to the next-level page table: recurse
       printk("\n");
-      vmprint_level((pagetable_t)pa, level - 1, va);
+      if (level > 0)
+        vmprint_level((pagetable_t)pa, level - 1, va);
     }
   }
 }
