@@ -198,8 +198,6 @@ vmprint(pagetable_t pagetable)
 }
 #endif
 
-
-
 #ifdef LAB_PGTBL
 // Return the level-1 PTE for va, allocating the level-2 -> level-1
 // page-table page if needed. Does not descend to level 0.
@@ -263,7 +261,6 @@ kmappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 // add a mapping to the kernel page table.
 // only used when booting.
 // does not flush TLB or enable paging.
-
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
@@ -281,7 +278,6 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // va and size MUST be page-aligned.
 // Returns 0 on success, -1 if walk() couldn't
 // allocate a needed page-table page.
-
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -312,6 +308,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   }
   return 0;
 }
+
 // create an empty user page table.
 // returns 0 if out of memory.
 pagetable_t
@@ -353,7 +350,6 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     *pte = 0;
   }
 }
-
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
