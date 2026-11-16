@@ -153,7 +153,7 @@ walkaddr(pagetable_t pagetable, uint64 va)
 static void
 vmprint_level(pagetable_t pt, int level, uint64 base_va)
 {
-  int depth = 3 - level;  // root entries get 1 " ..", then 2, then 3
+  int depth = 3 - level; // root entries get 1 " ..", then 2, then 3
 
   for (int i = 0; i < 512; i++) {
     pte_t pte = pt[i];
@@ -170,15 +170,22 @@ vmprint_level(pagetable_t pt, int level, uint64 base_va)
     if (pte & (PTE_R | PTE_W | PTE_X)) {
       // leaf PTE: print permission bits
       printk(" ");
-      if (pte & PTE_R) printk("R");
-      if (pte & PTE_W) printk("W");
-      if (pte & PTE_X) printk("X");
-      if (pte & PTE_U) printk("U");
+      if (pte & PTE_R)
+        printk("R");
+      if (pte & PTE_W)
+        printk("W");
+      if (pte & PTE_X)
+        printk("X");
+      if (pte & PTE_U)
+        printk("U");
+      if (level == 1)
+        printk(" (superpage)");
       printk("\n");
     } else {
       // points to the next-level page table: recurse
       printk("\n");
-      vmprint_level((pagetable_t)pa, level - 1, va);
+      if (level > 0)
+        vmprint_level((pagetable_t)pa, level - 1, va);
     }
   }
 }
@@ -191,6 +198,65 @@ vmprint(pagetable_t pagetable)
 }
 #endif
 
+#ifdef LAB_PGTBL
+// Return the level-1 PTE for va, allocating the level-2 -> level-1
+// page-table page if needed. Does not descend to level 0.
+static pte_t *
+walk_level1(pagetable_t pagetable, uint64 va)
+{
+  pte_t *pte = &pagetable[PX(2, va)];
+  if (*pte & PTE_V) {
+    pagetable = (pagetable_t)PTE2PA(*pte);
+  } else {
+    if ((pagetable = (pagetable_t)kalloc()) == 0)
+      return 0;
+    memset(pagetable, 0, PGSIZE);
+    *pte = PA2PTE(pagetable) | PTE_V;
+  }
+  return &pagetable[PX(1, va)];
+}
+
+// Copy of mappages() for the kernel page table only: uses a 2MB
+// superpage wherever va and pa are both 2MB-aligned and at least
+// 2MB remain, and falls back to 4KB pages otherwise.
+static int
+kmappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
+{
+  uint64 a = va, end = va + size;
+  pte_t *pte;
+
+  if ((va % PGSIZE) != 0)
+    panic("kmappages: va not aligned");
+  if ((size % PGSIZE) != 0)
+    panic("kmappages: size not aligned");
+  if (size == 0)
+    panic("kmappages: size");
+
+  while (a < end) {
+    if (a % SUPERPGSIZE == 0 && pa % SUPERPGSIZE == 0 &&
+        end - a >= SUPERPGSIZE) {
+      // map one 2MB superpage: a leaf PTE at level 1
+      if ((pte = walk_level1(pagetable, a)) == 0)
+        return -1;
+      if (*pte & PTE_V)
+        panic("kmappages: remap");
+      *pte = PA2PTE(pa) | perm | PTE_V;
+      a += SUPERPGSIZE;
+      pa += SUPERPGSIZE;
+    } else {
+      // map one regular 4KB page
+      if ((pte = walk(pagetable, a, 1)) == 0)
+        return -1;
+      if (*pte & PTE_V)
+        panic("kmappages: remap");
+      *pte = PA2PTE(pa) | perm | PTE_V;
+      a += PGSIZE;
+      pa += PGSIZE;
+    }
+  }
+  return 0;
+}
+#endif
 
 // add a mapping to the kernel page table.
 // only used when booting.
@@ -198,8 +264,13 @@ vmprint(pagetable_t pagetable)
 void
 kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 {
+#ifdef LAB_PGTBL
+  if (kmappages(kpgtbl, va, sz, pa, perm) != 0)
+    panic("kvmmap");
+#else
   if (mappages(kpgtbl, va, sz, pa, perm) != 0)
     panic("kvmmap");
+#endif
 }
 
 // Create PTEs for virtual addresses starting at va that refer to
@@ -207,7 +278,6 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
 // va and size MUST be page-aligned.
 // Returns 0 on success, -1 if walk() couldn't
 // allocate a needed page-table page.
-
 int
 mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
 {
@@ -238,6 +308,7 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   }
   return 0;
 }
+
 // create an empty user page table.
 // returns 0 if out of memory.
 pagetable_t
@@ -279,7 +350,6 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     *pte = 0;
   }
 }
-
 
 // Allocate PTEs and physical memory to grow process from oldsz to
 // newsz, which need not be page aligned.  Returns new size or 0 on error.
