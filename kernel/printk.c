@@ -170,7 +170,6 @@ backtrace(void)
 
     fp = *(uint64 *)(fp - 16);
   }
-  printk("\n");
 }
 
 void
