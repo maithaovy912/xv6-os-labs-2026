@@ -124,7 +124,6 @@ sys_sigalarm(void)
   p->alarm_interval = n;
   p->alarm_handler = handler;
   p->alarm_ticks = 0;
-  p->in_alarm = 0;
   return 0;
 }
 
