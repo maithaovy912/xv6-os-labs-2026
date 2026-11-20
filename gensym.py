@@ -1,49 +1,55 @@
 #!/usr/bin/env python3
-import subprocess
-import os
+import bisect, re, subprocess, sys
 
-def main():
-    kernel_elf = "kernel/kernel"
-    if not os.path.exists(kernel_elf):
-        return
+ELF = "kernel/kernel"
+prefix = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1] else "riscv64-linux-gnu-"
+empty = "empty" in sys.argv[2:]
 
-    # 1. Extract function addresses and names using nm
-    nm_cmd = "riscv64-linux-gnu-nm"
-    try:
-        subprocess.check_output([nm_cmd, "--version"])
-    except FileNotFoundError:
-        nm_cmd = "riscv64-unknown-elf-nm"
-
-    nm_out = subprocess.check_output([nm_cmd, "-n", kernel_elf]).decode('utf-8')
-
-    funcs = []
-    for line in nm_out.splitlines():
-        parts = line.split()
-        if len(parts) == 3 and parts[1] in ['T', 't']:
-            addr = int(parts[0], 16)
-            name = parts[2]
-            funcs.append((addr, name))
-
-    # 2. Retrieve file names and line numbers using addr2line
-    a2l_cmd = nm_cmd.replace("nm", "addr2line")
-    addrs = [hex(f[0]) for f in funcs]
-    
-    a2l_out = subprocess.check_output([a2l_cmd, "-e", kernel_elf] + addrs).decode('utf-8').splitlines()
-
-    # 3. Write generated symbol data to kernel/symbols.c
+def write(entries):
     with open("kernel/symbols.c", "w") as f:
-        f.write('#include "types.h"\n')
-        f.write('#include "symbols.h"\n\n')
-        f.write('struct symbol_entry ksymbols[] = {\n')
-        
-        for i, (addr, name) in enumerate(funcs):
-            file_line = a2l_out[i] if i < len(a2l_out) else "unknown:0"
-            if "kernel/" in file_line:
-                file_line = "kernel/" + file_line.split("kernel/")[-1]
-            f.write(f'  {{ 0x{addr:x}ULL, "{name}", "{file_line}" }},\n')
-            
-        f.write('};\n\n')
-        f.write(f'int nksymbols = {len(funcs)};\n')
+        f.write('#include "types.h"\n#include "symbols.h"\n\n')
+        f.write("struct symbol_entry ksymbols[] = {\n")
+        for a, fn, fl in entries:
+            f.write(f'  {{ 0x{a:x}ULL, "{fn}", "{fl}" }},\n')
+        f.write("  { 0, 0, 0 }\n};\n")          # sentinel keeps array non-empty
+        f.write(f"int nksymbols = {len(entries)};\n")
 
-if __name__ == "__main__":
-    main()
+if empty:
+    write([])
+    sys.exit(0)
+
+def run(cmd, **kw):
+    return subprocess.check_output(cmd, **kw).decode()
+
+# function ranges from nm
+funcs = []
+for line in run([prefix + "nm", "-n", ELF]).splitlines():
+    p = line.split()
+    if len(p) == 3 and p[1] in ("T", "t"):
+        funcs.append((int(p[0], 16), p[2]))
+starts = [a for a, _ in funcs]
+
+# return addresses = address after every call instruction
+rets = []
+pat = re.compile(r"^\s*([0-9a-f]+):\s+([0-9a-f]+)\s+(?:c\.)?jalr?\b")
+for line in run([prefix + "objdump", "-d", ELF]).splitlines():
+    m = pat.match(line)
+    if m:
+        rets.append(int(m.group(1), 16) + len(m.group(2)) // 2)
+
+# line info of the call instruction (ra - 1)
+inp = "\n".join(hex(r - 1) for r in rets) + "\n"
+out = subprocess.run([prefix + "addr2line", "-e", ELF], input=inp.encode(),
+                     stdout=subprocess.PIPE, check=True).stdout.decode().splitlines()
+
+entries = []
+for r, loc in zip(rets, out):
+    i = bisect.bisect_right(starts, r - 1) - 1
+    if i < 0:
+        continue
+    loc = loc.split(" (discriminator")[0]       # strip "(discriminator N)"
+    if "kernel/" in loc:
+        loc = "kernel/" + loc.split("kernel/")[-1]
+    entries.append((r, funcs[i][1], loc))
+entries.sort()
+write(entries)

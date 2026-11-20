@@ -139,23 +139,20 @@ printk(char *fmt, ...)
 void
 print_symbol(uint64 ra)
 {
-  int best_idx = -1;
-  uint64 max_addr = 0;
+  int lo = 0, hi = nksymbols - 1;
 
-  // Find the function with starting address <= ra and closest to ra
-  for (int i = 0; i < nksymbols; i++) {
-    if (ksymbols[i].addr <= ra && ksymbols[i].addr > max_addr) {
-      max_addr = ksymbols[i].addr;
-      best_idx = i;
+  while (lo <= hi) {
+    int mid = (lo + hi) / 2;
+    if (ksymbols[mid].addr == ra) {
+      printk("  %s - %s\n", ksymbols[mid].func, ksymbols[mid].file_line);
+      return;
     }
+    if (ksymbols[mid].addr < ra)
+      lo = mid + 1;
+    else
+      hi = mid - 1;
   }
-
-  if (best_idx != -1) {
-    printk("%s\n", ksymbols[best_idx].func);
-    printk("%s\n", ksymbols[best_idx].file_line);
-  } else {
-    printk("%p\n", (void *)ra);
-  }
+  printk("%p\n", (void *)ra); // not found: fall back to raw address
 }
 
 void
