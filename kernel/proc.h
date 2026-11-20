@@ -103,9 +103,9 @@ struct proc {
   char name[16];               // Process name (debugging)
 
   // Per-process state for configuring and tracking alarms.
-  int alarm_interval;          // If non-zero, disabled
+  int alarm_interval;          // If zero, disabled
   uint64 alarm_handler;
-  int alarm_ticks;             // ticks elapsed since the last invocation    
+  int alarm_ticks;             // ticks elapsed since the last invocation
   int in_alarm;                // handler is running, prevents nested calls
   struct trapframe saved_tf;   // saves register state at the time of the interrupt
 };
